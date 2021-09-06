@@ -1,0 +1,360 @@
+---
+title: "Understanding Transit Construction Costs"
+author: "Tristan Macy"
+date: "5/3/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE, include=FALSE}
+library(ggplot2)
+library(dplyr)
+library(tidytuesdayR)
+library(plotly)
+library(forcats)
+library(scales)
+library(countrycode)
+library(gapminder)
+library(ggmosaic)
+library(ggforce)
+
+tuesdata <- tidytuesdayR::tt_load('2021-01-05')
+tuesdata <- tidytuesdayR::tt_load(2021, week = 2)
+
+transit_cost <- tuesdata$transit_cost %>%
+            filter(!is.na(e)) %>%
+            mutate(real_cost = as.numeric(real_cost),
+                   start_year = as.numeric(start_year),
+                   end_year = as.numeric(end_year),
+                   tunnel_per = as.numeric(sub("%", "", tunnel_per)))
+
+transit_cost$continent <- countrycode(sourcevar = transit_cost$country,
+                                      origin = "iso2c",
+                                      destination = "continent") 
+
+transit_cost$countryname <- countrycode(sourcevar = transit_cost$country,
+                                        origin = "iso2c",
+                                        destination = "country.name") 
+
+transit_cost <- mutate(transit_cost,
+                       continent = ifelse(is.na(continent),"Europe", continent),
+                       countryname = ifelse(is.na(countryname), "United Kingdom", countryname))
+
+
+
+
+```
+
+This exploration revolves around the [Transit Cost Dataset](https://github.com/rfordatascience/tidytuesday/blob/master/data/2021/2021-01-05/transit_cost.csv)
+provided by the [Transit Cost](https://transitcosts.com/)  project and posted on the [Tidy Tuesday](https://github.com/rfordatascience/tidytuesday) project. Given the growing concerns with climate change, public transportiation has been presented as a means to reduce city-wide carbon emissions. Given increased interest in U.S infastructure due to the recent American Jobs plan, it is important to analyze the most cost effective ways to build transit lines. The goal of the exploration is to find what barriers related to cost are present in constructing these projects within the 50+ countries present within the dataset, mainly through the **cost per km** variable. This would provide insight into which countries have found the most success in minimizing construction costs and draw conclusions to how they compare to the United States. Questions this analysis will seek to answer include:
+
+* Which countries hold the lowest/highest **cost per km** in transit construction? 
+* Do higher **stations** lead to higher **cost per km** ?
+* Do higher **tunnel percentages** lead to higher **cost per km** ?
+* Do certain **continents** have higher **cost per km**?
+* How does the U.S **cost per km** relate to other countries present within the dataset.
+
+### The Data
+
+  Before any analysis could begin, there were some specific problems with how the data had been entered into R that needed be addressed. The first of these problems comes in the form of variables within the dataset being recognized as characters rather than doubles. Variables that required this specific changed were **real_cost** , **start_year** , **end_year** and **tunnel_per**. Aside from the variable changes, only a few of the entries had to be removed due to them missing substantial information such as **cost per km** and **country**.
+  
+  The dataset had come with country abbreviations rather than the country names themselves. Due to unfamiliarity with these abbreviations, the `countrycode` library was used to create a new variable **country_name** to use within the analysis. Later on within this project, `countrycode` was used to add another variable **continent** for analysis.
+
+## Data Exploration
+
+### Distribution of Transit Lines by Cost/Km
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+
+distribution <- ggplot(transit_cost, aes(cost_km_millions)) +
+                geom_histogram(bins= 100) +
+                labs(y= "Number of Lines", x= "Cost/Km (In Millions)",  tag = "Figure 1") +
+                scale_x_continuous(limits = c(0, 4000), breaks = seq(0, 4000, by = 500), labels = dollar)+
+                theme_bw()
+
+distribution
+
+```
+
+
+Taking a look at the histogram distribution in _Figure 1_  we see that the majority of transit **lines** cost below 300 million dollars per km. There do appear to be plenty outliers above 500 range with the largest even approaching the $4000 mark. Given that the data spans across 40 years, we can expect the overall price of transit projects to gradually increase potentially explaining the higher values.
+
+### Avg Cost/KM Across Time
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+    
+costTimeGraph <- group_by(transit_cost, year = year) %>%
+        summarize(avg_cost_km_millions = mean(cost_km_millions),n=n()) %>%
+        ggplot(aes(year,avg_cost_km_millions)) +
+        geom_line() +
+        geom_point(aes(size=n)) +
+        theme_bw() +
+        labs(x = "Year", y="Avg Cost/Km (in Millions)",
+             tag = "Figure 2") 
+
+costTimeGraph
+```
+
+
+As expected from _Figure 2_ we can see that the average **cost per km** has steadily increased up until 2020 where we see some fluctuations on the predicted cost of future projects. These future projects may be more ambitious than the projects of the previous years. We also see that the majority of constructions took place between the years 2010-2020. 
+    
+    
+### Does Length Affect the Cost/Km?
+
+Is money saved through **cost per km** by undertaking smaller or larger scale projects?
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+
+lengthCost <- ggplot(transit_cost, aes(length ,cost_km_millions,  text=countryname)) + 
+            geom_point(alpha = 0.1, size = 1, )+
+            theme_bw() +
+            labs(y="Cost/Km (In Millions)", x="Figure 3 :     Length (In Km",  tag="Figure 3") 
+            
+plotlyLengthCost <- ggplotly(lengthCost , tooltip = "text") %>%
+      style(hoverlabel = list(bgcolor = "white"))  
+
+logLengthCost <- ggplot(transit_cost, aes(length ,cost_km_millions,  text=countryname)) + 
+            geom_point(alpha = 0.1, size = 1, )+
+            theme_bw() +
+            labs(y="Log[Cost/Km (In Millions)]", x="Figure 4:      Length (In Km)",  tag="Figure 4") +
+            scale_y_log10() 
+  
+plotlyLogLengthCost <- ggplotly(logLengthCost, tooltip = "text") %>%
+      style(hoverlabel = list(bgcolor = "white"))  
+
+plotlyLengthCost
+
+plotlyLogLengthCost
+```
+
+  Taking a look at _Figure 3_ there doesn't appear to be a large relationship between **Length** and **cost per km**. The highest **cost per km** lines can be identified as the U.S which are also relativley short in length. Taking the log of **cost per km** gives a better view of the data in _Figure 4_, which will be useful in identifying if other variables such as **tunnel_per** or **stations** increase **cost per km** .
+  
+  
+### Does Tunnel Percentage Affect the Cost/Km?
+
+The dataset gives the percentage of each line that is tunneled through **tunnel_per**, which likely influences the amount needed to construct it. 
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+
+transit_costTunNaFilter <- filter(transit_cost, !is.na(tunnel_per))
+
+tunnelPerBins <- mutate(transit_costTunNaFilter , tunnelbins = cut(tunnel_per,4))
+
+tunGraph <- ggplot(tunnelPerBins,aes(x = length, y = cost_km_millions, text = countryname))+
+    geom_point(data = transit_cost, size = .3, color = "grey") +
+    geom_point(size = 0.3, alpha=0.75) +
+    scale_size_area(max_size = 8) +
+    guides(size = "none") +
+    theme_bw() +
+    scale_y_log10() +
+    
+    facet_wrap(~tunnelbins) +
+
+    labs(x= "Figure 5:       Length (in Km)", y="Log[Cost/Km (In Millions)]",  tag = "Figure 5")
+
+plotlyTunGraph <- ggplotly(tunGraph, tooltip = "text") %>%
+    style(hoverlabel = list(bgcolor = "white"))
+
+plotlyTunGraph
+
+```
+
+Faceting by 4 different bins of **tunnel_per**, _Figure 5_ reveals that majority of lines are highly tunnelled and are responsible for the most expensive of lines in terms of **cost per km**. While the difference is visible within the highly tunneled category, there does not appear to be much of a difference between the other 3 levels of  **tunnel_per**.
+
+### Do the Amount of Stations Affect the Cost/Km?
+
+The dataset also gives us the number of transit **stations** within each line, which might prove to be a factor in determining **cost per km**.
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+
+transit_costStationsNaFilter <- filter(transit_cost, !is.na(stations))
+
+stationsPerBins <- mutate(transit_costStationsNaFilter , staionsbins = cut(stations,6))
+
+
+
+stationGraph <- ggplot(stationsPerBins, aes(x = length, y = cost_km_millions, text = countryname)) +
+    geom_point(data = transit_cost, size = .3, color = "grey") +
+    geom_point(size = 0.3, alpha=0.75) +
+    scale_size_area(max_size = 8) +
+    guides(size = "none") +
+    theme_bw() +
+    scale_y_log10()+
+    facet_wrap(~staionsbins) +
+    labs(x= "Figure 6:         Length (in Km)",
+         y="Log[Cost/Km (In Millions)]",  tag = "Figure
+         6") 
+
+
+
+
+plotlyStationGraph <- ggplotly(stationGraph, tooltip = "text") %>%
+    style(hoverlabel = list(bgcolor = "white")) 
+
+plotlyStationGraph 
+
+```
+
+Faceting on 6 different **station** bins in _Figure 6_ reveals suprising results. While the amount of **stations** appear to increase with the **length** of a transit line, the actual **cost per km** appears to be consistent with even the highest vales occupying the lowest bin of **station**. **stations**  thus, appear to not be as significant on **cost per km** as predicted.
+
+
+
+
+## Continental Analysis
+
+Now that the general analyis of the entire data is concluded, we can now analyze differences based on the locations of all the lines. Since the data spans 50+ countries, we will introduce a **continent** grouping to make draw conclusions on any differences and similiarities.
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+
+pie_thm <- theme(axis.title = element_blank(),
+          axis.text = element_blank(),
+          axis.ticks = element_blank(),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank()) 
+    
+
+transit_cost_pie <- arrange(transit_cost, desc(continent)) %>%
+                    summarize(continent, n=n(), prop = n/sum(n)) %>%
+    ggplot(aes(x0 = 0, y0 = 0, r0 = 0, r = 1, amount = n, fill = continent)) +
+    geom_arc_bar(stat = "pie", color = NA) +
+    coord_fixed() +
+    pie_thm +
+    labs(fill= "Continent",  tag="Figure 7") +
+    scale_fill_manual(values = c(Americas = ("#EBA559"), Africa = ("#B8B856"), Asia =  ("#8CB7EB") , Europe = ("#5AC5B0"), Oceania = ("#F495CD")))
+
+
+transit_cost_pie 
+transit_cost_propTable <- group_by(transit_cost, continent) %>%
+                    summarize( n=n(), prop = n/ 537)
+
+
+transit_cost_propTable <-data.frame(head(transit_cost_propTable, 5))
+kbl <- knitr::kable(transit_cost_propTable,col.names = c("Continent","N", "Proportion"),title ="Test", format = "html")
+kableExtra::kable_styling(kbl, full_width = TRUE)
+
+
+transit_costProp <- filter(transit_cost, year < 2021 & year >2010) %>%
+                    group_by(year) %>%
+                    summarize(continent, n=n()) %>%
+                    mutate(continent = factor(continent, c("Asia", "Europe",
+                                                            "Oceania","Americas",
+                                                           "Africa")))
+
+  prop <- ggplot(transit_costProp, aes(x = year, y = n, fill = continent)) +
+    
+    labs(x = "Year",
+          y = "Proportion", 
+         tag="Figure 8") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    scale_y_continuous(expand = c(0, 0))+
+    scale_fill_manual(values = c(Americas = ("#EBA559"), 
+                                 Africa = ("#B8B856"), 
+                                 Asia =  ("#8CB7EB") ,
+                                 Europe = ("#5AC5B0"), 
+                                 Oceania = ("#F495CD")))
+
+  prop_spine <- prop + geom_mosaic(aes(weight= n ,x = product(year), fill = continent)) + coord_flip()
+
+  prop_spine
+
+```
+
+
+
+From _Figure 3_ we could see the overall proportion of new railways being built through the **years** 1987 - 2027 were predominatley in **Asia** with 72.1% followed by **Europe** with  19.0% , **Americas** with 6.7%, **Africa** with 1.3% and **Oceania** with 0.9%. Taking a closer look between years 2010-2020 within, _Figure 8_ we see a similiar trend within the last 10 years with construction being dominated by the combination of **Asia** and **Europe**.
+
+
+
+### Continental Boxplots
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+
+
+continentBoxplot <- ggplot(transit_cost, aes(cost_km_millions, continent,fill = continent)) + 
+     geom_boxplot(varwidth = TRUE,size = 0.25, alpha=0.75) +
+     geom_jitter(alpha=0.2, size = 0.1,  width = 1) +
+     theme_bw() +
+     labs(x="Cost/Km (In Millions)", y="Continent",  tag = "Figure 9") +
+    scale_fill_manual(values = c(Americas = ("#EBA559"),
+                                 Africa = ("#B8B856"), Asia =
+                                   ("#8CB7EB") , Europe =
+                                   ("#5AC5B0"), Oceania =
+                                   ("#F495CD")))
+
+
+continentBoxplot
+
+
+
+```
+
+
+_Figure 9_ reveals that the **Americas** appear to have a larger median and range than that of **Asia** and **Europe**. The **Americas** also boast the largest outliers that we had found earlier to be due to the United States. Despite the large amount of projects undertaken by **Asia** and **Europe**, they consistently maintain a lower **cost per km** in their transit construction. **Oceania** and **Africa** maintain higher medians than the other 3, but have too little entries to draw meaningful conclusions. A closer look in the **Americas** may reveal that the United States may be responsible for the increased **Cost per Km**.
+
+
+
+## Closer Look at the United States
+
+### How Does the U.S Stack Up Against Other Countries?
+
+The top 10 countries with constructed lines in the dataset were taken and their Average **cost_km_millions** computed. The rest of the countries were grouped into a other category.
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+
+  transit10 <- mutate(transit_cost, countryname = fct_lump(countryname, 10)) %>%
+                arrange(cost_km_millions)  %>%
+                mutate(countryname = fct_reorder(countryname, cost_km_millions))
+
+table2 <-group_by(transit10, countryname)%>%
+          summarize(n=n(), avg_costkm = mean(cost_km_millions)) %>%
+          arrange(desc(n))  
+
+avgTable <-data.frame(head(table2, 11))
+kbl2 <- knitr::kable(avgTable,col.names = c("Country Name","N", "Avg Cost/Km (Millions)"),title ="Test", format = "html")
+kableExtra::kable_styling(kbl2, full_width = TRUE)
+
+  countryBoxplot <- ggplot(transit10, aes(cost_km_millions, countryname, fill = continent)) +
+        geom_boxplot() +
+        labs(x="Cost/Km (In Millions)", y="Country",  tag = "Figure 10") +
+        theme_bw() +
+    scale_fill_manual(values = c(Americas = ("#EBA559"), Africa = ("#B8B856"), Asia =  ("#8CB7EB") , Europe = ("#5AC5B0"), Oceania = ("#F495CD")))
+  countryBoxplot
+  
+
+```
+
+In _Figure 10_ we can clearly see that the U.S is much higher **cost per km** than that of any other countries. Even among more devoloped countries such as Germany and Japan, the U.S appears to still spend much more per km. It also becomes apparent the outliers within the Americas in _Figure 9_ were a result of the U.S and many of the outlier values are not considered outliers within the U.S only boxplot.  The U.S average of 1211.47 is also the highest within the whole dataset.
+
+### What Transit Lines in the U.S Have the Highest Cost/KM?
+
+
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+transitUS  <- filter(transit_cost, country == "US") %>%
+              arrange(cost_km_millions) %>%
+              mutate(line = factor(line, levels=line))
+
+usHistogram <-ggplot(transitUS, aes(x = cost_km_millions, y = line, fill = city)) + 
+              geom_col() +
+              labs(x="Cost/Km (in   Millions)" , y="Transit Line",color ="U.S Cities", tag= "Figure 11") +
+              scale_x_continuous(labels = dollar) +
+              theme_bw()
+
+usHistogram 
+```
+
+Within _Figure 11_, we can see that the most expensive transit lines are in New York. When compared to New York, Los Angeles lines maintain at least half the **cost per km** of New York while only having 1 less line in total constructed. If New York were to be taken out, we would see a closer resemblance to the other boxplots within _Figure 10_. New York being the only city within the U.S with a drastic difference may prove hopeful for the future of transit projects within the U.S.
+
+
+## Conclusion
+
+Transit lines since, 1987 have largely been undertaken by Asia and Europe who likely value public transportation more than the motorized nature of the U.S. Generally the number of **stations** does not appear to have much of an impact on **cost per km** meaning  costs are largely based on other aspects of construction. **Tunnel per** was revealed to include the most expensive transit lines including the most expensive lines in New York. While this is true for high **Tunnel per**, there appears to be little impact on **cost per km** for transit lines that arn't completely (100%) tunneled.
+
+In regards to continent, the Europe and Asia comparison reveals that the United States' large **cost per km** is a problem that is unique to them. Compared to other countries both developed and developing, the United States is spending much more per kilometer. Perhaps the United States' could save money from learning from the construction methods of other countries. A closer look into the United States however, reveals that the issue in spending lies mainly in spending within New York. Future analysis would thus, focus on why New York is much more expensive when compared to the rest of the U.S. Were the costs unavoidable due to specific problems, or should all future construction projects model other cities within the U.S that resemble the cost of the rest of the world? 
