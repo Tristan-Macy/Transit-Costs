@@ -9,7 +9,12 @@ draw conclusions to how they compare to the United States.
 Questions this analysis will seek to answer include:
 
 •	Which countries hold the lowest/highest cost per km in transit construction?
+
 •	Do higher stations lead to higher cost per km ?
+
 •	Do higher tunnel percentages lead to higher cost per km ?
+
 •	Do certain continents have higher cost per km?
+
 •	How does the U.S cost per km relate to other countries present within the dataset.
+
